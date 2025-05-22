@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traces: imprints of artificial effort</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            /* padding-top: 60px; /* Adjusted padding if needed due to fixed title */
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Georgia', serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+
+        #site-title {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-size: 1.6em; /* Made slightly larger */
+            color: #ddd; /* Slightly brighter than before */
+            z-index: 20;
+            font-weight: normal; /* Can be bold if preferred */
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+        }
+
+        #particle-canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        #quote-container {
+            position: relative;
+            z-index: 1;
+            padding: 25px; /* Slightly more padding */
+            margin-top: 40px; /* Ensure space below potential title area */
+            max-width: 80%;
+            background-color: rgba(0,0,0,0.35); /* Slightly darker background */
+            border-radius: 10px;
+        }
+
+        #quote-text {
+            font-size: 2.5em; 
+            line-height: 1.4;
+            margin-bottom: 30px;
+            opacity: 0; 
+            min-height: 100px; 
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .controls button {
+            padding: 10px 15px;
+            font-size: 1em;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s, transform 0.1s;
+        }
+
+        .controls button:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+        .controls button:active {
+            transform: scale(0.95); /* Click feedback */
+        }
+
+
+        #music-player-container {
+            position: fixed;
+            bottom: 70px; 
+            left: 20px;
+            z-index: 5;
+            transform: scale(0.5); 
+            transform-origin: bottom left;
+            /* The music player will always be visible now */
+        }
+        
+        #music-player-container iframe {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        /* .hidden class can be removed if no longer used */
+
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            #site-title {
+                font-size: 1.2em;
+                top: 15px;
+                left: 15px;
+                width: calc(100% - 30px); /* Allow text to wrap if long */
+                text-align: left; /* Or center if preferred on mobile */
+            }
+            #quote-container {
+                margin-top: 80px; /* More space for title on mobile */
+                padding: 20px;
+            }
+            #quote-text {
+                font-size: 1.8em;
+            }
+            #music-player-container {
+                transform: scale(0.35); 
+                bottom: 130px; /* Adjust if overlapping with controls */
+            }
+            .controls {
+                bottom: 15px;
+                right: 15px;
+                flex-direction: row; 
+            }
+        }
+         @media (max-width: 480px) {
+            #quote-text {
+                font-size: 1.5em;
+            }
+             #site-title {
+                font-size: 1.1em;
+                top: 10px;
+                left: 10px;
+             }
+             #quote-container {
+                margin-top: 70px;
+             }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="site-title">Traces: imprints of artificial effort. A website by JJ27</div>
+
+    <div id="particle-canvas-container"></div>
+
+    <div id="quote-container">
+        <p id="quote-text"></p>
+    </div>
+
+    <div id="music-player-container">
+        <!-- Suno iframes will be dynamically added here -->
+    </div>
+
+    <div class="controls">
+        <button id="next-quote-btn">Next Quote</button>
+        <button id="copy-quote-btn">Copy Quote</button>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const QUOTES_FILE = 'quotes_for_website.json';
+        const MS_PER_WORD = 350; 
+        const PARTICLE_COUNT = 5000;
+        const SUNO_IFRAMES_SRC = [
+            "https://suno.com/embed/8c44adeb-d19f-4330-9840-15ccb4df06ba",
+            "https://suno.com/embed/d5374ffc-1972-4735-973a-9b75ffbebd61",
+            "https://suno.com/embed/020f1b06-be31-4668-9e02-841b4147d2b0",
+            "https://suno.com/embed/b11ef3a3-ac81-4c5d-8783-eec5955696fd"
+        ];
+        const AVERAGE_SONG_DURATION_MS = 3 * 60 * 1000; // Approx. 3 minutes (3 * 60 * 1000 ms)
+
+        // --- DOM Elements ---
+        const quoteTextElement = document.getElementById('quote-text');
+        const nextQuoteBtn = document.getElementById('next-quote-btn');
+        const copyQuoteBtn = document.getElementById('copy-quote-btn');
+        const musicPlayerContainer = document.getElementById('music-player-container');
+        const particleCanvasContainer = document.getElementById('particle-canvas-container');
+
+        // --- State ---
+        let quotes = [];
+        let currentQuoteTextForCopy = ""; // Stores the current quote's text for the copy function
+        let quoteTimeoutId = null;
+        let musicCycleTimeoutId = null; // To manage continuous music
+        let activeMusicIframe = null;
+
+        // --- Three.js Variables ---
+        let scene, camera, renderer, particles, particleMaterial;
+        let currentParticleStyle = 'nebula'; 
+
+        // --- Initialize ---
+        async function initialize() {
+            initThreeJS();
+            initMusic(); // Start the first song and schedule next
+            await loadQuotes();
+            if (quotes.length > 0) {
+                showNextQuote();
+            } else {
+                quoteTextElement.textContent = "No quotes found. Please check 'quotes_for_website.json'.";
+                anime({ targets: quoteTextElement, opacity: [0, 1], duration: 1000 });
+            }
+            setupEventListeners();
+            animate(); 
+        }
+
+        // --- Quotes Logic ---
+        async function loadQuotes() {
+            try {
+                const response = await fetch(QUOTES_FILE);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                quotes = data.map(item => item.quote); 
+                console.log("Quotes loaded:", quotes.length);
+            } catch (error) {
+                console.error("Failed to load quotes:", error);
+                quoteTextElement.textContent = "Error loading quotes.";
+                anime({ targets: quoteTextElement, opacity: [0, 1], duration: 1000 });
+            }
+        }
+
+        function showNextQuote() {
+            if (quotes.length === 0) return;
+
+            if (quoteTimeoutId) {
+                clearTimeout(quoteTimeoutId);
+            }
+
+            const randomIndex = Math.floor(Math.random() * quotes.length);
+            currentQuoteTextForCopy = quotes[randomIndex]; // Store the current quote for copy functionality
+
+            const wordCount = currentQuoteTextForCopy.split(' ').length;
+            const displayTime = wordCount * MS_PER_WORD;
+
+            anime.timeline({
+                easing: 'easeInOutQuad'
+            })
+            .add({
+                targets: quoteTextElement,
+                opacity: [1, 0],
+                duration: 800,
+                complete: () => {
+                    quoteTextElement.textContent = currentQuoteTextForCopy;
+                }
+            })
+            .add({
+                targets: quoteTextElement,
+                opacity: [0, 1],
+                duration: 800,
+                delay: 100 
+            });
+            
+            quoteTimeoutId = setTimeout(showNextQuote, displayTime + 1600); 
+        }
+
+        // --- Music Logic ---
+        function initMusic() {
+            if (musicCycleTimeoutId) {
+                clearTimeout(musicCycleTimeoutId); // Clear previous timeout if any
+            }
+            musicPlayerContainer.innerHTML = ''; // Clear any existing iframe
+
+            const randomIndex = Math.floor(Math.random() * SUNO_IFRAMES_SRC.length);
+            const selectedSrc = SUNO_IFRAMES_SRC[randomIndex];
+            
+            activeMusicIframe = document.createElement('iframe');
+            // Attempt to force autoplay via URL parameter, though browser policies are strict
+            const autoplaySrc = selectedSrc + (selectedSrc.includes('?') ? '&' : '?') + 'autoplay=1&auto_play=true&play=true';
+            activeMusicIframe.src = autoplaySrc;
+            activeMusicIframe.width = "380"; 
+            activeMusicIframe.height = "120";
+            activeMusicIframe.allow = "autoplay; encrypted-media;"; // Ensure autoplay is allowed
+            activeMusicIframe.setAttribute('frameborder', '0'); // Common practice
+            
+            musicPlayerContainer.appendChild(activeMusicIframe);
+            
+            // Schedule the next song to load
+            musicCycleTimeoutId = setTimeout(initMusic, AVERAGE_SONG_DURATION_MS);
+            console.log(`Music player initialized. Next song reload in approximately ${AVERAGE_SONG_DURATION_MS / 60000} minutes.`);
+        }
+
+        // --- Copy Quote Logic ---
+        function copyQuoteToClipboard() {
+            if (!currentQuoteTextForCopy) {
+                console.warn("No quote currently displayed to copy.");
+                return;
+            }
+
+            navigator.clipboard.writeText(currentQuoteTextForCopy).then(() => {
+                console.log('Quote copied to clipboard!');
+                const originalButtonText = copyQuoteBtn.textContent;
+                copyQuoteBtn.textContent = 'Copied!';
+                copyQuoteBtn.style.backgroundColor = 'rgba(76, 175, 80, 0.7)'; // Greenish feedback
+                setTimeout(() => {
+                    copyQuoteBtn.textContent = originalButtonText;
+                    copyQuoteBtn.style.backgroundColor = ''; // Reset style
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy quote: ', err);
+                // Fallback for older browsers or if clipboard API fails
+                try {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = currentQuoteTextForCopy;
+                    textArea.style.position = "fixed"; 
+                    textArea.style.opacity = "0";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    
+                    console.log('Quote copied to clipboard (fallback)!');
+                    const originalButtonText = copyQuoteBtn.textContent;
+                    copyQuoteBtn.textContent = 'Copied!';
+                    copyQuoteBtn.style.backgroundColor = 'rgba(76, 175, 80, 0.7)';
+                    setTimeout(() => {
+                        copyQuoteBtn.textContent = originalButtonText;
+                        copyQuoteBtn.style.backgroundColor = '';
+                    }, 2000);
+
+                } catch (fallbackErr) {
+                    console.error('Fallback copy method also failed:', fallbackErr);
+                    alert("Could not copy text. Your browser might not support this feature or has it disabled.");
+                }
+            });
+        }
+
+
+        // --- 3D Particle Visuals (Three.js) ---
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 300;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            particleCanvasContainer.appendChild(renderer.domElement);
+
+            const particleGeometry = new THREE.BufferGeometry();
+            const positions = [];
+            const colors = [];
+            const color = new THREE.Color();
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                positions.push((Math.random() - 0.5) * 1000); 
+                positions.push((Math.random() - 0.5) * 1000); 
+                positions.push((Math.random() - 0.5) * 1000); 
+                
+                color.setHSL(Math.random(), 0.7, 0.7); 
+                colors.push(color.r, color.g, color.b);
+            }
+            particleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            particleGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+
+            particleMaterial = new THREE.PointsMaterial({
+                size: 3,
+                vertexColors: true, 
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending, 
+                depthWrite: false 
+            });
+
+            particles = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(particles);
+            scheduleVisualStyleChange();
+        }
+
+        function animateParticles() {
+            const time = Date.now() * 0.0005;
+            const positions = particles.geometry.attributes.position.array;
+
+            for (let i = 0; i < positions.length; i += 3) {
+                positions[i + 0] += Math.sin(time + i * 0.1) * 0.1; 
+                positions[i + 1] += Math.cos(time + i * 0.05) * 0.1; 
+                 if (currentParticleStyle === 'starfield') {
+                     positions[i + 2] += 0.5; 
+                     if (positions[i + 2] > camera.position.z) positions[i + 2] = -500;
+                 }
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+            particles.rotation.y += 0.0005; 
+        }
+
+        function changeVisualStyle() {
+            const styles = ['nebula', 'starfield', 'abstract_lines']; 
+            currentParticleStyle = styles[Math.floor(Math.random() * styles.length)];
+            // console.log("Changing visual style to:", currentParticleStyle); // Kept for debugging
+
+            const targetColor = new THREE.Color().setHSL(Math.random(), 0.7, 0.6);
+            // Correctly animate THREE.Color with anime.js using an intermediate object
+            let tempColor = { r: particleMaterial.color.r, g: particleMaterial.color.g, b: particleMaterial.color.b };
+            anime({
+                targets: tempColor,
+                r: targetColor.r,
+                g: targetColor.g,
+                b: targetColor.b,
+                duration: 5000,
+                easing: 'easeInOutQuad',
+                update: function() {
+                    particleMaterial.color.setRGB(tempColor.r, tempColor.g, tempColor.b);
+                }
+            });
+
+             anime({
+                targets: particleMaterial,
+                opacity: Math.random() * 0.4 + 0.6, 
+                size: Math.random() * 2 + 2, 
+                duration: 3000,
+                easing: 'easeInOutQuad'
+            });
+
+            if (currentParticleStyle === 'starfield') {
+                anime({ targets: particleMaterial, size: Math.random() * 1 + 0.5, duration: 2000 });
+            } else if (currentParticleStyle === 'nebula') {
+                anime({ targets: particleMaterial, size: Math.random() * 3 + 2, duration: 2000 });
+            }
+            scheduleVisualStyleChange();
+        }
+        
+        function scheduleVisualStyleChange() {
+            const delay = Math.random() * 10000 + 15000; 
+            setTimeout(changeVisualStyle, delay);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            animateParticles();
+            renderer.render(scene, camera);
+        }
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            nextQuoteBtn.addEventListener('click', showNextQuote);
+            copyQuoteBtn.addEventListener('click', copyQuoteToClipboard); // Listener for the new copy button
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Start ---
+        document.addEventListener('DOMContentLoaded', initialize);
+
+    </script>
+</body>
+</html>
